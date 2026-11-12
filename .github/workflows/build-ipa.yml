@@ -1,0 +1,86 @@
+# FF Cache Manager + ATH — GitHub Actions
+# Validates sources and (when secrets/SDK are present) runs the Windows IPA pipeline.
+name: build-ipa
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  source-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Required ATH client files
+        run: |
+          test -f FFATHLicense.m
+          test -f FFATHLicense.h
+          test -f FFATHConfig.h
+          test -f main.m
+          test -f ATH_INTEGRATION.md
+          grep -q 'FFATHLicense.h' main.m
+          grep -q 'FFATHVerifyLicense' main.m
+          grep -q 'FFATHLicense.m' build_clean.ps1
+          echo "ATH integration sources present"
+
+      - name: ATH worker present
+        run: |
+          test -f ath-license/src/worker.js
+          test -f ath-license/wrangler.toml
+          test -f ath-license/package.json
+          echo "ATH worker tree present"
+
+      - name: No placeholder secret committed (warn only)
+        run: |
+          if grep -q 'example.workers.dev' FFATHConfig.h; then
+            echo "::warning::FFATHConfig.h still has placeholder base URL — set real values for private release builds"
+          fi
+          if grep -qE 'FFATH_DEFAULT_HMAC_SECRET @"[^"]+"' FFATHConfig.h | grep -vq '""'; then
+            echo "::warning::HMAC secret may be present in FFATHConfig.h — keep private builds private"
+          fi
+
+  # Optional: full IPA when a self-hosted Windows runner + secrets exist.
+  # Label the runner `ff-ipa-windows` and provide the listed secrets.
+  ipa-windows:
+    if: ${{ vars.ENABLE_IPA_BUILD == 'true' }}
+    runs-on: [self-hosted, windows, ff-ipa-windows]
+    needs: source-check
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Inject ATH config from secrets
+        shell: pwsh
+        env:
+          ATH_BASE: ${{ secrets.ATH_BASE_URL }}
+          ATH_HMAC: ${{ secrets.ATH_HMAC_SECRET }}
+        run: |
+          if (-not $env:ATH_BASE -or -not $env:ATH_HMAC) {
+            throw "Set ATH_BASE_URL and ATH_HMAC_SECRET repository secrets"
+          }
+          $cfg = @"
+          #ifndef FFATH_CONFIG_H
+          #define FFATH_CONFIG_H
+          #define FFATH_DEFAULT_BASE_URL @`"$($env:ATH_BASE)`"
+          #define FFATH_DEFAULT_HMAC_SECRET @`"$($env:ATH_HMAC)`"
+          #endif
+          "@
+          Set-Content -Path FFATHConfig.h -Value $cfg -Encoding utf8
+
+      - name: Build CLEAN IPA
+        shell: pwsh
+        env:
+          FF_SDK: ${{ secrets.FF_SDK_PATH }}
+          FF_CLANG: ${{ secrets.FF_CLANG_PATH }}
+          FILZA_IPA: ${{ secrets.FILZA_DONOR_IPA_PATH }}
+        run: |
+          powershell -ExecutionPolicy Bypass -File .\build_clean.ps1 -FilzaIpa $env:FILZA_IPA
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FFCacheManager-CLEAN
+          path: dist/clean/*.ipa
+          if-no-files-found: error

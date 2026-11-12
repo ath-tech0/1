@@ -1,0 +1,16 @@
+name = "ath-license-bot"
+main = "src/worker.js"
+compatibility_date = "2026-11-07"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "ath_license_db"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+
+[vars]
+APP_NAME = "ATH App"
+FEATURE_NAME = "premium_access"
+MAX_RESELLER_DEPTH = "3"
+DEFAULT_RESELLER_QUOTA = "100"
+MAX_BULK_SIZE = "100"
+RATE_LIMIT_PER_MINUTE = "30"

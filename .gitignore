@@ -1,0 +1,33 @@
+# Build outputs
+dist/
+build/
+*.ipa
+*.o
+*.dylib
+*.framework/
+protected-core.json
+release_manifest.json
+
+# Secrets / local config overrides
+FFATHConfig.local.h
+*.pem
+!signing-public.pem
+.env
+.env.*
+
+# Tooling
+node_modules/
+.wrangler/
+.dev.vars
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.pyc
+
+# Donor binaries (license-sensitive)
+donors/
+*.ipa.bak
